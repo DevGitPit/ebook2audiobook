@@ -13,17 +13,45 @@ import traceback, socket, warnings, unicodedata, urllib.request, uuid, zipfile, 
 import ebooklib, gradio as gr, psutil, regex as re, requests, stanza
 
 from typing import Any
+from PIL import Image, ImageSequence
+from tqdm import tqdm
+from bs4 import BeautifulSoup, NavigableString, Tag
+from collections import Counter
+from collections.abc import Mapping
+from collections.abc import MutableMapping
 from datetime import datetime
+from ebooklib import epub
+from ebooklib.epub import EpubBook
+from ebooklib.epub import EpubHtml
+from glob import glob
+from iso639 import Lang
+from markdown import markdown
+from multiprocessing import Pool, cpu_count
+from multiprocessing import Manager, Event
+from multiprocessing.managers import DictProxy, ListProxy
+from stanza.pipeline.core import Pipeline, DownloadMethod
+from num2words import num2words
+from pathlib import Path
 from PIL import Image
+from pydub import AudioSegment
+from pydub.utils import mediainfo
+from queue import Queue, Empty
+from types import MappingProxyType
+from langdetect import detect
+from unidecode import unidecode
+from phonemizer import phonemize
 
-from lib.conf import *
-from lib.lang import *
+from lib import *
+from lib.classes.subprocess_pipe import SubprocessPipe
+from lib.classes.vram_detector import VRAMDetector
+from lib.classes.voice_extractor import VoiceExtractor
+from lib.classes.tts_manager import TTSManager
+#from lib.classes.redirect_console import RedirectConsole
+#from lib.classes.argos_translator import ArgosTranslator
 
-# ---------------------------------------------------------------------
-# Logging configuration (example)
-# ---------------------------------------------------------------------
+#import logging
 #logging.basicConfig(
-#    level=logging.INFO,
+#    level=logging.INFO, # DEBUG for more verbosity
 #    format="%(asctime)s [%(levelname)s] %(message)s"
 #)
 
@@ -2330,21 +2358,31 @@ def convert_ebook(args:dict)->tuple:
                                     if session['tts_engine'] == TTS_ENGINES['BARK']:
                                         os.environ['SUNO_USE_SMALL_MODELS'] = 'False'                        
                             if session['device'] == devices['CUDA']['proc']:
-                                session['device'] = session['device'] if devices['CUDA']['found'] else devices['CPU']['proc']
-                                if session['device'] == devices['CPU']['proc']:
-                                    msg += f'CUDA not supported by the Torch installed!<br/>Read {default_gpu_wiki}<br/>Switching to CPU'
+                                if not devices['CUDA']['found']:
+                                    session['device'] = devices['CPU']['proc']
+                                    msg = f'CUDA not supported by the Torch installed!<br/>Read {default_gpu_wiki}<br/>Switching to CPU'
+                                else:
+                                    msg = f'Using {session['device'].upper()}'
                             elif session['device'] == devices['MPS']['proc']:
                                 if not devices['MPS']['found']:
                                     session['device'] = devices['CPU']['proc']
-                                    msg += f'MPS not supported by the Torch installed!<br/>Read {default_gpu_wiki}<br/>Switching to CPU'
+                                    msg = f'MPS not supported by the Torch installed!<br/>Read {default_gpu_wiki}<br/>Switching to CPU'
+                                else:
+                                    msg = f'Using {session['device'].upper()}'
                             elif session['device'] == devices['ROCM']['proc']:
-                                session['device'] = session['device'] if devices['ROCM']['found'] else devices['CPU']['proc']
-                                if session['device'] == devices['CPU']['proc']:
-                                    msg += f'ROCM not supported by the Torch installed!<br/>Read {default_gpu_wiki}<br/>Switching to CPU'
+                                if not devices['ROCM']['found']:
+                                    session['device'] = devices['CPU']['proc']
+                                    msg = f'ROCM not supported by the Torch installed!<br/>Read {default_gpu_wiki}<br/>Switching to CPU'
+                                else:
+                                    msg = f'Using {session['device'].upper()}'
                             elif session['device'] == devices['XPU']['proc']:
-                                session['device'] = session['device'] if devices['XPU']['found'] else devices['CPU']['proc']
-                                if session['device'] == devices['CPU']['proc']:
-                                    msg += f"XPU not supported by the Torch installed!<br/>Read {default_gpu_wiki}<br/>Switching to CPU"
+                                if not devices['XPU']['found']:
+                                    session['device'] = devices['CPU']['proc']
+                                    msg = f"XPU not supported by the Torch installed!<br/>Read {default_gpu_wiki}<br/>Switching to CPU"
+                                else:
+                                    msg = f'Using {session['device'].upper()}'
+                            else: # Default case, session['device'] == 'cpu' or invalid
+                                msg = f'Using {session['device'].upper()}'
                             if session['tts_engine'] == TTS_ENGINES['BARK']:
                                 if session['free_vram_gb'] < 12.0:
                                     os.environ["SUNO_OFFLOAD_CPU"] = "True"
@@ -2353,8 +2391,6 @@ def convert_ebook(args:dict)->tuple:
                                 else:
                                     os.environ["SUNO_OFFLOAD_CPU"] = "False"
                                     os.environ["SUNO_USE_SMALL_MODELS"] = "False"
-                            if msg == '':
-                                msg = f"Using {session['device'].upper()}"
                             msg += msg_extra;
                             device_vram_required = default_engine_settings[session['tts_engine']]['rating']['RAM'] if session['device'] == devices['CPU']['proc'] else default_engine_settings[session['tts_engine']]['rating']['VRAM']
                             if float(total_vram_gb) >= float(device_vram_required):
