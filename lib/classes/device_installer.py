@@ -261,6 +261,12 @@ class DeviceInstaller():
             return True
 
         def has_nvidia_gpu_pci():
+            try:
+                import torch
+                if torch.cuda.is_available():
+                    return True
+            except ImportError:
+                pass
             # macOS: NVIDIA GPUs are unsupported → always False
             if sys.platform == "darwin":
                 return False
@@ -465,6 +471,23 @@ class DeviceInstaller():
         # CUDA
         # ============================================================
         elif has_working_cuda() and has_nvidia_gpu_pci():
+            try:
+                import torch
+                if torch.cuda.is_available():
+                    devices['CUDA']['found'] = True
+                    name = 'cuda'
+                    cuda_version_str = torch.version.cuda
+                    if cuda_version_str:
+                        parts = cuda_version_str.split(".")
+                        major = parts[0]
+                        minor = parts[1] if len(parts) > 1 else 0
+                        tag = f'cu{major}{minor}'
+                    else:
+                        tag = 'cuda'
+                    return (name, tag, msg)
+            except ImportError:
+                pass
+
             version_out = ''
             if os.name == 'posix':
                 for p in (

@@ -9,51 +9,25 @@ from __future__ import annotations
 
 import argparse, asyncio, csv, fnmatch, hashlib, io, json, math, os, pytesseract, gc
 import platform, random, shutil, subprocess, sys, tempfile, threading, time, uvicorn
-import traceback, socket, unicodedata, urllib.request, uuid, zipfile, fitz
+import traceback, socket, warnings, unicodedata, urllib.request, uuid, zipfile, fitz
 import ebooklib, gradio as gr, psutil, regex as re, requests, stanza
 
 from typing import Any
-from PIL import Image, ImageSequence
-from tqdm import tqdm
-from bs4 import BeautifulSoup, NavigableString, Tag
-from collections import Counter
-from collections.abc import Mapping
-from collections.abc import MutableMapping
 from datetime import datetime
-from ebooklib import epub
-from ebooklib.epub import EpubBook
-from ebooklib.epub import EpubHtml
-from glob import glob
-from iso639 import Lang
-from markdown import markdown
-from multiprocessing import Pool, cpu_count
-from multiprocessing import Manager, Event
-from multiprocessing.managers import DictProxy, ListProxy
-from stanza.pipeline.core import Pipeline, DownloadMethod
-from num2words import num2words
-from pathlib import Path
 from PIL import Image
-from pydub import AudioSegment
-from pydub.utils import mediainfo
-from queue import Queue, Empty
-from types import MappingProxyType
-from langdetect import detect
-from unidecode import unidecode
-from phonemizer import phonemize
 
-from lib import *
-from lib.classes.subprocess_pipe import SubprocessPipe
-from lib.classes.vram_detector import VRAMDetector
-from lib.classes.voice_extractor import VoiceExtractor
-from lib.classes.tts_manager import TTSManager
-#from lib.classes.redirect_console import RedirectConsole
-#from lib.classes.argos_translator import ArgosTranslator
+from lib.conf import *
+from lib.lang import *
 
-#import logging
+# ---------------------------------------------------------------------
+# Logging configuration (example)
+# ---------------------------------------------------------------------
 #logging.basicConfig(
-#    level=logging.INFO, # DEBUG for more verbosity
+#    level=logging.INFO,
 #    format="%(asctime)s [%(levelname)s] %(message)s"
 #)
+
+warnings.filterwarnings("ignore", category=UserWarning, module="jieba._compat")
 
 context = None
 context_tracker = None
